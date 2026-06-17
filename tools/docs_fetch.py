@@ -91,13 +91,66 @@ def probe_symbol(client: httpx.Client, symbol: str, out: Path | None) -> dict:
     return rec
 
 
+def _safe(symbol: str) -> str:
+    return symbol.replace("(", "").replace(")", "").replace("/", "_")
+
+
+def download_listing(listing: Path, out: Path, delay: float,
+                     fisheries_only: bool) -> int:
+    """Download each record's English directdoc PDF from an enumeration listing.
+
+    Reads JSONL from docs_enumerate.py (symbol + english_url), saves to
+    out/raw/docs/<symbol>.pdf, and rewrites the listing with downloaded/raw_path.
+    """
+    import time
+    rows = [json.loads(l) for l in listing.read_text(encoding="utf-8").splitlines() if l.strip()]
+    docs = (out / "raw" / "docs"); docs.mkdir(parents=True, exist_ok=True)
+    ok = 0
+    targets = [r for r in rows if r.get("english_url") and (not fisheries_only or r.get("fisheries"))]
+    print(f"downloading {len(targets)} PDF(s) from {listing.name} ...")
+    with httpx.Client(headers={"User-Agent": "wto-fish-corpus-bot/1.0 (research)"},
+                      timeout=90.0, follow_redirects=True) as client:
+        for i, r in enumerate(targets, 1):
+            sym = r.get("symbol") or f"doc{i}"
+            try:
+                resp = client.get(r["english_url"])
+            except httpx.HTTPError as e:
+                r["downloaded"] = False; r["error"] = str(e)[:60]
+                print(f"  [ERR ] {sym}: {e}"); continue
+            is_pdf = "pdf" in resp.headers.get("content-type", "").lower() or resp.content[:5] == b"%PDF-"
+            if resp.status_code == 200 and is_pdf and len(resp.content) > 1000:
+                path = docs / f"{_safe(sym)}.pdf"
+                path.write_bytes(resp.content)
+                r["downloaded"] = True; r["raw_path"] = f"raw/docs/{path.name}"; r["size"] = len(resp.content)
+                ok += 1
+                if i % 25 == 0 or i == len(targets):
+                    print(f"  {i}/{len(targets)} ok={ok}")
+            else:
+                r["downloaded"] = False; r["error"] = f"not a pdf (HTTP {resp.status_code})"
+                print(f"  [miss] {sym}: HTTP {resp.status_code}")
+            time.sleep(delay)
+    with listing.open("w", encoding="utf-8") as f:
+        for r in rows:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    print(f"\n{ok}/{len(targets)} downloaded. listing updated: {listing}")
+    return ok
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Probe/download docs.wto.org symbols via directdoc")
     ap.add_argument("--symbol", action="append", help="extra symbol (repeatable)")
     ap.add_argument("--download", action="store_true", help="save PDFs that resolve")
     ap.add_argument("--out", default="./wto_fish_out_v6", help="crawl out dir (for raw/docs/)")
     ap.add_argument("--manifest", default="./docs_manifest/docs_manifest.jsonl")
+    ap.add_argument("--listing", help="download every record in this enumeration JSONL "
+                    "(from docs_enumerate.py) via its english_url")
+    ap.add_argument("--fisheries-only", action="store_true", help="with --listing: only fisheries records")
+    ap.add_argument("--delay", type=float, default=0.5)
     args = ap.parse_args()
+
+    if args.listing:
+        return 0 if download_listing(Path(args.listing), Path(args.out),
+                                     args.delay, args.fisheries_only) >= 0 else 1
 
     symbols = DEFAULT_SYMBOLS + (args.symbol or [])
     out = Path(args.out) if args.download else None
