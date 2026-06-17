@@ -159,6 +159,15 @@ def load_items(out: Path) -> list[dict]:
     return items
 
 
+def load_tnrl(listing: Path) -> tuple[int, list[dict]]:
+    """Return (total enumerated, fisheries-flagged records) from a TN/RL listing."""
+    if not listing.exists():
+        return 0, []
+    rows = [json.loads(l) for l in listing.read_text(encoding="utf-8").splitlines() if l.strip()]
+    fish = [r for r in rows if r.get("fisheries")]
+    return len(rows), fish
+
+
 def load_docs(docs_manifest: Path) -> list[dict]:
     """Pending Tier-2 documents that resolved via directdoc (downloaded)."""
     if not docs_manifest.exists():
@@ -219,8 +228,10 @@ def _clear(ws) -> None:
     ws.delete_rows(1, ws.max_row or 1)
 
 
-def update_xlsx(xlsx: Path, items: list[dict], docs: list[dict]) -> None:
+def update_xlsx(xlsx: Path, items: list[dict], docs: list[dict],
+                tnrl_total: int = 0, tnrl_fish: list[dict] | None = None) -> None:
     wb = openpyxl.load_workbook(xlsx)
+    tnrl_fish = tnrl_fish or []
     n_doc = {s: sum(1 for d in docs if d["series"] == s)
              for s in ("WT/MIN", "WT/L", "TN/RL", "G/FS")}
     instruments = "、".join(it["name"] for it in items
@@ -255,9 +266,11 @@ def update_xlsx(xlsx: Path, items: list[dict], docs: list[dict]) -> None:
                 "WT/L/1144 直取未命中，需手动核实文档号", ""])
     ws3.append(["文档库·谈判提案",
                 "规则谈判组谈判提案（TN/RL 系列，2001 年至今）",
-                f"✓ directdoc 直取可用，已下载样本 {n_doc['TN/RL']} 份（TN/RL/31）放入 for_teacher/待确认/。"
-                "⚠ 全系列检索页有人机验证，无法自动批量；估计渔业相关 100-300 份"
-                "（TN/RL 混含非渔业内容需筛），全量枚举待检索抓取器", ""])
+                f"✓ 已用脚本检索枚举全系列：共 {tnrl_total or '—'} 份，其中标题含渔业关键词 "
+                f"{len(tnrl_fish)} 份（见“TN-RL枚举(渔业)”表 / docs_manifest/tn_rl_fisheries.csv，"
+                "含英文 directdoc 链接，待老师筛选确认后再批量下载）。"
+                f"directdoc 直取已验证可用，已下载样本 {n_doc['TN/RL']} 份（TN/RL/31）放入 for_teacher/待确认/。"
+                "注：标题无“渔业”字样的会议纪要等程序性文件未计入该 201", ""])
     ws3.append(["文档库·委员会文件",
                 "渔业补贴委员会文件（协定 2025-09-15 生效后新设，G/FS/ 系列已确认）",
                 f"✓ 系列号确认为 G/FS/，directdoc 可用，已下载 {n_doc['G/FS']} 份（G/FS/1）放入 "
@@ -283,6 +296,17 @@ def update_xlsx(xlsx: Path, items: list[dict], docs: list[dict]) -> None:
                     f"for_teacher/{PENDING_DIR}/{CATEGORY_ZH.get(d['category'], d['category'])}/"
                     f"{_safe(d['name'])}.pdf"])
 
+    # TN/RL fisheries enumeration (listing only; teacher picks before download).
+    tname = "TN-RL枚举(渔业)"
+    if tname in wb.sheetnames:
+        del wb[tname]
+    if tnrl_fish:
+        ws5 = wb.create_sheet(tname)
+        ws5.append(["文档号", "标题 / 会议信息", "英文 directdoc 链接", "状态"])
+        for r in tnrl_fish:
+            ws5.append([r.get("symbol", ""), r.get("text", ""), r.get("english_url", ""),
+                        "待筛选确认"])
+
     wb.save(xlsx)
 
 
@@ -292,15 +316,29 @@ def main() -> int:
     ap.add_argument("--xlsx", required=True, help="checklist .xlsx to update in place")
     ap.add_argument("--docs-manifest", default="./docs_manifest/docs_manifest.jsonl",
                     help="Tier-2 pending-docs manifest (from docs_fetch.py)")
+    ap.add_argument("--tnrl-listing", default="./docs_manifest/tn_rl_listing.jsonl",
+                    help="TN/RL enumeration (from docs_enumerate.py)")
     args = ap.parse_args()
 
     out = Path(args.out)
     items = load_items(out)
     docs = load_docs(Path(args.docs_manifest))
+    tnrl_total, tnrl_fish = load_tnrl(Path(args.tnrl_listing))
     build_folder(out, items, docs)
-    update_xlsx(Path(args.xlsx), items, docs)
+    update_xlsx(Path(args.xlsx), items, docs, tnrl_total, tnrl_fish)
 
-    print(f"items: {len(items)} | pending docs: {len(docs)}")
+    # Also emit a standalone CSV of the fisheries TN/RL list (robust fallback).
+    if tnrl_fish:
+        import csv
+        csv_path = Path(args.tnrl_listing).with_name("tn_rl_fisheries.csv")
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["symbol", "title", "english_directdoc_url"])
+            for r in tnrl_fish:
+                w.writerow([r.get("symbol", ""), r.get("text", ""), r.get("english_url", "")])
+
+    print(f"items: {len(items)} | pending docs: {len(docs)} | "
+          f"TN/RL enumerated: {tnrl_total} (fisheries {len(tnrl_fish)})")
     print(f"for_teacher/: {out / 'for_teacher'}")
     print(f"xlsx updated: {args.xlsx}")
     return 0
