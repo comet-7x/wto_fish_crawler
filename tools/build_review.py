@@ -40,7 +40,7 @@ CATEGORY_ZH: dict[str, str] = {
     "negotiation_submission": "谈判",
     "multimedia": "音视频",
     "committee": "委员会",
-    "mandate_decision": "部长决定/议定书",
+    "mandate_decision": "部长决定与议定书",
     "uncategorized": "未分类",
 }
 # Display order for the checklist / folders.
