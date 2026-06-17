@@ -84,18 +84,23 @@ NON_ENGLISH_PATH = re.compile(r"/(french|spanish)/", re.IGNORECASE)
 
 # --------------------------------------------------------------------------- #
 # Document handling (absorbed from the broad-spider approach).
-# PDFs are fetched + parsed (MinerU). These other formats are fetched + saved +
-# recorded in the manifest (parsed later if the teacher keeps them):
+# Current policy (teacher-review pass): convert only HTML -> Markdown. PDFs and
+# all other binary/media formats below are fetched + saved + recorded in the
+# manifest WITHOUT conversion, so the teacher can verify the inventory first;
+# parsing happens in a later pass. Audio/video (.mp4/.mp3/...) are downloaded
+# too, per the teacher-review requirement.
 DOC_FETCH_SUFFIXES = (".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt",
-                      ".txt", ".md", ".csv")
-# Large / media formats: recorded by URL at discovery WITHOUT downloading.
-DOC_RECORD_ONLY_SUFFIXES = (".zip", ".rar", ".7z", ".tar", ".gz",
-                            ".mp3", ".mp4", ".wav", ".mov")
+                      ".txt", ".md", ".csv",
+                      ".mp4", ".mp3", ".wav", ".mov", ".m4a", ".avi")
+# Large archive formats: recorded by URL at discovery WITHOUT downloading
+# (potentially huge, rarely useful as corpus). Media moved to fetch above.
+DOC_RECORD_ONLY_SUFFIXES = (".zip", ".rar", ".7z", ".tar", ".gz")
 # Content-types that signal a binary document even when the URL has no
 # revealing extension (dynamic download endpoints).
 DOC_CONTENT_TYPES = ("application/pdf", "application/msword",
                      "application/vnd", "application/zip",
-                     "application/octet-stream")
+                     "application/octet-stream",
+                     "video/", "audio/")
 
 # Tracking params to strip during URL normalization.
 TRACKING_PARAMS = {"utm_source", "utm_medium", "utm_campaign", "utm_term",
@@ -126,6 +131,10 @@ URL_CATEGORY_RULES: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"information_session"),                 "publication"),
     (re.compile(r"/res_e/publications_e/"),              "publication"),
     (re.compile(r"/res_e/webcas_e/"),                    "publication"),
+    # Media files are classified by extension first, so videos under /news_e/ or
+    # /minist_e/ (and year-prefixed names like 2024_07_05_..._chair_update.mp4)
+    # all group as multimedia rather than scattering across categories.
+    (re.compile(r"\.(?:mp4|mp3|wav|mov|m4a|avi)$", re.IGNORECASE), "multimedia"),
     (re.compile(r"/news_e/"),                            "news"),
     (re.compile(r"/minist_e/"),                          "ministerial"),
     # Year-prefixed PDFs in the fish dir are external international instruments
@@ -136,6 +145,7 @@ URL_CATEGORY_RULES: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bWT/L/", re.IGNORECASE),              "mandate_decision"),
     (re.compile(r"\bTN/RL", re.IGNORECASE),              "negotiation_submission"),
     (re.compile(r"ngr_|/ngr"),                           "negotiation_submission"),
+    (re.compile(r"\bG/FS", re.IGNORECASE),               "committee"),
     (re.compile(r"committee", re.IGNORECASE),            "committee"),
     (re.compile(r"/fish_e\.htm$"),                       "overview"),
 ]

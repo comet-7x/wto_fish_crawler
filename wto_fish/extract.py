@@ -7,10 +7,15 @@ against the page's base URL.
 
 from __future__ import annotations
 
+import re
 from urllib.parse import urljoin
 
 import trafilatura
 from selectolax.parser import HTMLParser
+
+# Recover `href="..."` values the lenient HTML parser drops inside malformed /
+# deeply-nested markup (see extract_links).
+_HREF_RE = re.compile(r"""<a\s[^>]*?href=["']([^"']+)["']""", re.IGNORECASE)
 
 
 def extract_markdown(html: str, url: str) -> str | None:
@@ -48,19 +53,31 @@ def extract_title(html: str) -> str | None:
 
 
 def extract_links(html: str, base_url: str) -> list[str]:
-    """All absolute hrefs found on the page (deduped, order-preserving)."""
-    tree = HTMLParser(html)
+    """All absolute hrefs found on the page (deduped, order-preserving).
+
+    Primary pass: selectolax (<a href>). Supplement: a regex over the raw HTML
+    recovers anchors selectolax drops inside malformed/nested markup. On WTO
+    topic pages the parser silently loses sidebar links (observed: the
+    chair-update .mp4 and the MC12 briefing page), which would otherwise leave
+    in-scope English content uncrawled.
+    """
     seen: set[str] = set()
     out: list[str] = []
-    for a in tree.css("a[href]"):
-        href = a.attributes.get("href")
+
+    def _add(href: str | None) -> None:
         if not href:
-            continue
+            return
         href = href.strip()
         if href.startswith(("mailto:", "javascript:", "#", "tel:")):
-            continue
+            return
         absolute = urljoin(base_url, href)
         if absolute not in seen:
             seen.add(absolute)
             out.append(absolute)
+
+    tree = HTMLParser(html)
+    for a in tree.css("a[href]"):
+        _add(a.attributes.get("href"))
+    for m in _HREF_RE.finditer(html):
+        _add(m.group(1))
     return out

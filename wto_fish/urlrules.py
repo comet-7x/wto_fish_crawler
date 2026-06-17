@@ -123,6 +123,18 @@ def is_record_only_doc(url: str) -> bool:
     return u.endswith(config.DOC_RECORD_ONLY_SUFFIXES)
 
 
+def expected_binary(url: str) -> bool:
+    """True if the URL path points at a non-HTML file by its extension.
+
+    Used to detect access-gated media: WTO answers a direct GET for such a file
+    with an HTML 'error=true' login/index shell. A binary URL coming back as
+    HTML therefore means 'blocked', not 'a page'.
+    """
+    u = url.lower().split("?", 1)[0]
+    suffixes = (".pdf", *config.DOC_FETCH_SUFFIXES, *config.DOC_RECORD_ONLY_SUFFIXES)
+    return u.endswith(suffixes)
+
+
 def should_crawl(url: str) -> bool:
     """Final gate for the frontier: not excluded AND crawlable tier AND English."""
     if is_excluded(url):

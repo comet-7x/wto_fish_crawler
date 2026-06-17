@@ -243,7 +243,9 @@ def test_kind_query_string_ignored():
 
 
 def test_record_only_docs():
+    # Only bulky archives are record-only. Media (mp4/mp3/...) is now downloaded
+    # for teacher review, so it must NOT be record-only.
     assert is_record_only_doc("https://www.wto.org/x/archive_e.zip")
-    assert is_record_only_doc("https://www.wto.org/x/video_e.mp4")
+    assert not is_record_only_doc("https://www.wto.org/x/video_e.mp4")
     assert not is_record_only_doc("https://www.wto.org/x/report_e.pdf")
     assert not is_record_only_doc("https://www.wto.org/x/notify_e.docx")
