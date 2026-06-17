@@ -190,11 +190,17 @@ def load_docs(docs_manifest: Path) -> list[dict]:
 
 
 def build_folder(out: Path, items: list[dict], docs: list[dict],
-                 tnrl_fish: list[dict] | None = None) -> None:
+                 tnrl_fish: list[dict] | None = None,
+                 gfs_records: list[dict] | None = None) -> None:
     dest = out / "for_teacher"
     if dest.exists():
         shutil.rmtree(dest)
     tnrl_fish = tnrl_fish or []
+    gfs_records = gfs_records or []
+    # Symbols already covered by a full-series download: drop them from the
+    # curated `docs` sample so they aren't filed twice.
+    series_syms = {r.get("symbol") for r in (*tnrl_fish, *gfs_records) if r.get("raw_path")}
+    docs = [d for d in docs if d["symbol"] not in series_syms]
     notes: dict[str, list[str]] = {}
     for it in items:
         zh = CATEGORY_ZH.get(it["category"], it["category"])
@@ -219,27 +225,30 @@ def build_folder(out: Path, items: list[dict], docs: list[dict],
         folder.mkdir(parents=True, exist_ok=True)
         (folder / f"{_safe(d['name'])}.pdf").write_bytes((out / d["raw_path"]).read_bytes())
 
-    # The full fisheries TN/RL set (downloaded by docs_fetch --listing) -> 谈判.
-    tn_folder = dest / PENDING_DIR / CATEGORY_ZH["negotiation_submission"]
-    n_tnrl = 0
-    for r in tnrl_fish:
-        if not r.get("raw_path"):
-            continue
-        src = out / r["raw_path"]
-        if not src.exists():
-            continue
-        tn_folder.mkdir(parents=True, exist_ok=True)
-        (tn_folder / f"{_safe(r.get('symbol') or 'doc')}.pdf").write_bytes(src.read_bytes())
-        n_tnrl += 1
+    # Full series downloaded by docs_fetch --listing -> their category folders.
+    def _place(records: list[dict], category: str) -> int:
+        folder = dest / PENDING_DIR / CATEGORY_ZH[category]
+        n = 0
+        for r in records:
+            src = out / r["raw_path"] if r.get("raw_path") else None
+            if not src or not src.exists():
+                continue
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / f"{_safe(r.get('symbol') or 'doc')}.pdf").write_bytes(src.read_bytes())
+            n += 1
+        return n
 
-    if docs or n_tnrl:
+    n_tnrl = _place(tnrl_fish, "negotiation_submission")
+    n_gfs = _place(gfs_records, "committee")
+
+    if docs or n_tnrl or n_gfs:
         (dest / PENDING_DIR / "_读我.txt").write_text(
             "本目录是 docs.wto.org 文档库（部长决定 / 谈判提案 / 委员会文件）中\n"
             "经 directdoc 匿名下载的英文文档，已分类放好，但【是否纳入本专题待老师确认】。\n"
-            "均未解析为 Markdown。\n\n"
-            f"· 谈判/：TN/RL 系列中标题含渔业关键词的 {n_tnrl} 份（文件名为文档号，"
-            "标题对照见清单“TN-RL枚举(渔业)”表）。\n"
-            "· 部长决定与议定书/、委员会/：核心样本。\n",
+            "均未解析为 Markdown。文件名为文档号，标题对照见清单对应枚举表。\n\n"
+            f"· 谈判/：TN/RL 系列中标题含渔业关键词的 {n_tnrl} 份（见“TN-RL枚举(渔业)”表）。\n"
+            f"· 委员会/：渔业补贴委员会 G/FS 全系列 {n_gfs} 份（见“G-FS枚举”表）。\n"
+            "· 部长决定与议定书/：核心部长决定样本。\n",
             encoding="utf-8")
 
 
@@ -254,6 +263,7 @@ def update_xlsx(xlsx: Path, items: list[dict], docs: list[dict],
     tnrl_fish = tnrl_fish or []
     gfs_records = gfs_records or []
     n_tnrl_dl = sum(1 for r in tnrl_fish if r.get("downloaded"))
+    n_gfs_dl = sum(1 for r in gfs_records if r.get("downloaded"))
     n_doc = {s: sum(1 for d in docs if d["series"] == s)
              for s in ("WT/MIN", "WT/L", "TN/RL", "G/FS")}
     instruments = "、".join(it["name"] for it in items
@@ -294,9 +304,10 @@ def update_xlsx(xlsx: Path, items: list[dict], docs: list[dict],
                 "注：标题无“渔业”字样的会议纪要等程序性文件未计入", ""])
     ws3.append(["文档库·委员会文件",
                 "渔业补贴委员会文件（协定 2025-09-15 生效后新设，G/FS/ 系列已确认）",
-                f"✓ 系列号确认为 G/FS/。已枚举全系列共 {gfs_total or len(gfs_records)} 份"
-                "（见“G-FS枚举”表 / docs_manifest/gfs_listing.jsonl，含英文 directdoc 链接）。"
-                f"directdoc 已验证可用，已下载样本 {n_doc['G/FS']} 份（G/FS/1）。该委员会将持续产出新文件，需定期枚举", ""])
+                f"✓ 系列号确认为 G/FS/。已枚举全系列共 {gfs_total or len(gfs_records)} 份，"
+                f"英文版【已下载 {n_gfs_dl} 份】放入 for_teacher/待确认/委员会/（见“G-FS枚举”表 / "
+                "docs_manifest/gfs_listing.jsonl）。多为成员履约/通报文件，未解析为 Markdown，待老师确认纳入。"
+                "该委员会将持续产出新文件，需定期重跑枚举", ""])
     ws3.append(["音视频·受限",
                 "渔业谈判主席视频、MC13 视频等（.mp4，共 3 个）",
                 "⚠ 直接 GET 被重定向到登录/错误页，无法匿名下载；需浏览器/流式抓取。已在清单中标记", ""])
@@ -339,10 +350,13 @@ def update_xlsx(xlsx: Path, items: list[dict], docs: list[dict],
         del wb[gname]
     if gfs_records:
         ws6 = wb.create_sheet(gname)
-        ws6.append(["文档号", "标题 / 会议信息", "英文 directdoc 链接", "状态"])
+        ws6.append(["文档号", "标题 / 会议信息", "英文 directdoc 链接", "状态", "本地路径"])
+        gfs_zh = CATEGORY_ZH["committee"]
         for r in gfs_records:
+            dl = r.get("downloaded")
+            local = f"for_teacher/{PENDING_DIR}/{gfs_zh}/{_safe(r.get('symbol') or '')}.pdf" if dl else ""
             ws6.append([r.get("symbol", ""), r.get("text", ""), r.get("english_url", ""),
-                        "已枚举·待确认"])
+                        "已下载·待确认纳入" if dl else "未下载", local])
 
     wb.save(xlsx)
 
@@ -364,7 +378,7 @@ def main() -> int:
     docs = load_docs(Path(args.docs_manifest))
     tnrl_total, tnrl_fish = load_tnrl(Path(args.tnrl_listing))
     gfs_total, gfs_records = load_tnrl(Path(args.gfs_listing))
-    build_folder(out, items, docs, tnrl_fish)
+    build_folder(out, items, docs, tnrl_fish, gfs_records)
     update_xlsx(Path(args.xlsx), items, docs, tnrl_total, tnrl_fish, gfs_total, gfs_records)
 
     # Standalone CSVs (robust fallback, openable without Excel lock issues).
