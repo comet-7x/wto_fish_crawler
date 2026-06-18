@@ -107,6 +107,23 @@ DOC_NAME_BY_SYMBOL: dict[str, str] = {
 PENDING_DIR = "待确认（请老师核定是否纳入）"
 
 
+# The "Implementing the WTO Agreement on Fisheries Subsidies" publication
+# (res_e/booksp_e), split into parts. Keyed by lowercased basename.
+NAME_BY_BASENAME.update({
+    "implementfishagreement22_e.pdf": "实施《渔业补贴协定》出版物（完整版）",
+    "impfishag_dgmessage_e.pdf": "实施出版物·总干事致辞",
+    "impfishag_part_1_e.pdf": "实施出版物·第一部分",
+    "impfishag_part_2_e.pdf": "实施出版物·第二部分",
+    "impfishag_part_3_e.pdf": "实施出版物·第三部分",
+    "impfishag_conclusion_e.pdf": "实施出版物·结论",
+    "impfishag_annex_how_to_e.pdf": "实施出版物·附录（如何接受协定）",
+    "impfishag_faq_e.pdf": "实施出版物·常见问题",
+    "impfishag_model_e.pdf": "实施出版物·示范接受文书",
+    "fishagree_e.pdf": "协定宣传册（PDF 版）",
+})
+_NAME_BY_BASENAME_LC = {k.lower(): v for k, v in NAME_BY_BASENAME.items()}
+
+
 def _basename(url: str) -> str:
     return url.rstrip("/").split("?", 1)[0].split("/")[-1]
 
@@ -115,7 +132,9 @@ def _name_for(url: str, base: str, title: str | None) -> str:
     for sub, name in NAME_BY_URL_SUBSTR.items():
         if sub in url:
             return name
-    return NAME_BY_BASENAME.get(base, title or base)
+    if base.lower() in _NAME_BY_BASENAME_LC:
+        return _NAME_BY_BASENAME_LC[base.lower()]
+    return title or base.rsplit(".", 1)[0]   # strip extension to avoid name.pdf.pdf
 
 
 def _safe(name: str) -> str:
@@ -135,6 +154,10 @@ def load_items(out: Path) -> list[dict]:
     items = []
     for r in rows:
         if r.get("duplicate_of"):
+            continue
+        # Drop failed fetches (soft-404, HTTP errors). Keep access-gated media —
+        # those are listed (as 受限) further down.
+        if r.get("error") and not _is_blocked(r):
             continue
         url = r["url"]
         base = _basename(url)
@@ -214,7 +237,10 @@ def build_folder(out: Path, items: list[dict], docs: list[dict],
                  gfs_records: list[dict] | None = None) -> None:
     dest = out / "for_teacher"
     if dest.exists():
-        shutil.rmtree(dest)
+        # ignore_errors: an empty leftover dir held open by a file-explorer
+        # window (Windows) can't be removed; that's harmless — files get
+        # overwritten by name and the dir is recreated below.
+        shutil.rmtree(dest, ignore_errors=True)
     tnrl_fish = tnrl_fish or []
     gfs_records = gfs_records or []
     # Symbols already covered by a full-series download: drop them from the
