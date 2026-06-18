@@ -159,6 +159,26 @@ def load_items(out: Path) -> list[dict]:
     return items
 
 
+def load_manual(path: Path) -> list[dict]:
+    """Manually-added, teacher-confirmed corpus items (e.g. foundational legal
+    texts not reachable by the bounded crawl). Same shape as load_items()."""
+    if not path.exists():
+        return []
+    out = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        r = json.loads(line)
+        rp = r["raw_path"]
+        out.append({
+            "url": r.get("url", ""), "category": r.get("category", "uncategorized"),
+            "name": r["name"], "kind": r.get("kind", "PDF"),
+            "status": r.get("status", "已下载·待解析"),
+            "artifact": rp, "ext": rp.rsplit(".", 1)[-1],
+        })
+    return out
+
+
 def load_tnrl(listing: Path) -> tuple[int, list[dict]]:
     """Return (total enumerated, fisheries-flagged records) from a TN/RL listing."""
     if not listing.exists():
@@ -371,10 +391,14 @@ def main() -> int:
                     help="TN/RL enumeration (from docs_enumerate.py)")
     ap.add_argument("--gfs-listing", default="./docs_manifest/gfs_listing.jsonl",
                     help="G/FS committee enumeration (from docs_enumerate.py)")
+    ap.add_argument("--manual", default="./docs_manifest/manual_additions.jsonl",
+                    help="manually-added, teacher-confirmed corpus items")
     args = ap.parse_args()
 
     out = Path(args.out)
-    items = load_items(out)
+    items = load_items(out) + load_manual(Path(args.manual))
+    items.sort(key=lambda it: (CATEGORY_ORDER.index(it["category"])
+                               if it["category"] in CATEGORY_ORDER else 999, it["name"]))
     docs = load_docs(Path(args.docs_manifest))
     tnrl_total, tnrl_fish = load_tnrl(Path(args.tnrl_listing))
     gfs_total, gfs_records = load_tnrl(Path(args.gfs_listing))
