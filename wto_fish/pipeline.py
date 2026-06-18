@@ -171,6 +171,13 @@ class Crawler:
         markdown: str | None = None
         if res.content_type == "html":
             html_text = res.body.decode("utf-8", "replace")
+            # WTO returns HTTP 200 + a "page not found" shell for dead URLs.
+            # Don't keep that shell as content.
+            if extract.is_soft_404(html_text):
+                rec.error = "soft-404: WTO page-not-found shell"
+                log.warning("soft-404 skipped: %s", url_norm)
+                self._write_manifest(rec)
+                return
             self._save_raw(res.body, rec.raw_sha256, "html")
             rec.title = extract.extract_title(html_text)
             markdown = extract.extract_markdown(html_text, url_norm)

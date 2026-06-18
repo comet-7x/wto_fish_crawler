@@ -39,6 +39,7 @@ T1_PATH_PREFIXES: tuple[str, ...] = (
     "/english/tratop_e/rulesneg_e/fish_e/",
     "/english/docs_e/legal_e/fish_e",          # legal text (htm + any fish_*)
     "/english/res_e/publications_e/fish",      # fisheries publications
+    "/english/res_e/booksp_e/",                 # books/publications PDFs (gated below)
     "/english/news_e/",                         # news items (gated below)
     "/english/thewto_e/minist_e/",              # ministerial briefings (gated below)
 )
@@ -50,6 +51,7 @@ FISH_RELEVANCE = re.compile(r"fish", re.IGNORECASE)
 T1_PREFIX_RELEVANCE: dict[str, re.Pattern[str]] = {
     "/english/news_e/": FISH_RELEVANCE,
     "/english/thewto_e/minist_e/": FISH_RELEVANCE,
+    "/english/res_e/booksp_e/": FISH_RELEVANCE,
 }
 
 # Backward-compat alias (kept so existing references/tests don't break).
@@ -121,6 +123,7 @@ EXCLUDE_URL_PATTERNS: tuple[re.Pattern[str], ...] = (
 # --------------------------------------------------------------------------- #
 URL_CATEGORY_RULES: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"/docs_e/legal_e/fish"),                "legal_text"),
+    (re.compile(r"/res_e/booksp_e/"),                    "publication"),  # publication PDFs
     (re.compile(r"agreement_fisheries_subsidies_e"),     "ratification"),
     (re.compile(r"fish_acceptances"),                    "ratification"),
     (re.compile(r"implementfishagreement"),              "implementation"),

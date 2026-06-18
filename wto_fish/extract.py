@@ -18,13 +18,24 @@ from selectolax.parser import HTMLParser
 _HREF_RE = re.compile(r"""<a\s[^>]*?href=["']([^"']+)["']""", re.IGNORECASE)
 
 
+# WTO serves a soft-404 (HTTP 200 + a "page not found" shell) for dead URLs.
+# This phrase is specific to that shell, so matching it won't hit real content.
+_SOFT_404_RE = re.compile(r"page you are looking for might have been removed", re.IGNORECASE)
+
+
+def is_soft_404(html: str) -> bool:
+    """True if this HTML is the WTO 'page cannot be found' shell (a soft 404)."""
+    return bool(_SOFT_404_RE.search(html))
+
+
 def extract_markdown(html: str, url: str) -> str | None:
     """Return main-content Markdown, or None if nothing meaningful was found."""
     md = trafilatura.extract(
         html,
         url=url,
         output_format="markdown",
-        include_links=False,   # body text feeds embeddings; links live in manifest edges
+        include_links=True,    # keep hrefs: WTO topic pages are link hubs; the
+                               # URLs are needed for citations + to follow refs
         include_tables=True,
         include_comments=False,
         favor_recall=True,
