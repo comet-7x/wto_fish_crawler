@@ -254,8 +254,9 @@ def build_folder(out: Path, items: list[dict], docs: list[dict],
         folder.mkdir(parents=True, exist_ok=True)
         if it["artifact"]:
             src = out / it["artifact"]
-            ext = "md" if it["artifact"].endswith(".md") else it["ext"]
-            (folder / f"{_safe(it['name'])}.{ext}").write_bytes(src.read_bytes())
+            if src.exists():
+                ext = "md" if it["artifact"].endswith(".md") else it["ext"]
+                (folder / f"{_safe(it['name'])}.{ext}").write_bytes(src.read_bytes())
         else:
             notes.setdefault(zh, []).append(f"- {it['name']}  ——  {it['status']}\n  {it['url']}")
     for zh, lines in notes.items():
