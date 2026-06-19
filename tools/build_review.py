@@ -330,8 +330,13 @@ def update_xlsx(xlsx: Path, items: list[dict], docs: list[dict],
     for it in items:
         zh = CATEGORY_ZH.get(it["category"], it["category"])
         counts[zh] = counts.get(zh, 0) + 1
+    seen_zh: set[str] = set()
     for zh in [CATEGORY_ZH[c] for c in CATEGORY_ORDER if CATEGORY_ZH[c] in counts]:
         ws2.append([zh, counts[zh]])
+        seen_zh.add(zh)
+    for zh, count in counts.items():
+        if zh not in seen_zh:
+            ws2.append([zh, count])
     ws2.append(["合计", len(items)])
 
     ws3 = wb["WTO待确认范围"]
