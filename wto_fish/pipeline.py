@@ -24,7 +24,7 @@ import logging
 from collections import deque
 from pathlib import Path
 
-from . import classify, config, dedup, extract, pdf_convert, urlrules
+from . import classify, config, dedup, extract, urlrules
 from .fetch import Fetcher
 from .models import PageRecord, Tier
 
@@ -154,9 +154,30 @@ class Crawler:
 
         rec.lang = "en" if urlrules.is_english(url_norm) else "und"
 
+        # A binary/media URL that comes back as HTML was redirected to a shell:
+        # WTO serves an "error=true" login/index page for access-gated media
+        # (e.g. the chair-update videos). Record it as blocked — do NOT mistake
+        # that shell for the document's content.
+        if res.content_type == "html" and urlrules.expected_binary(url_norm):
+            rec.content_type = url_norm.lower().split("?", 1)[0].rsplit(".", 1)[-1][:5]
+            rec.category = classify.classify(url_norm, rec.title)
+            rec.error = "access-gated: direct download blocked (HTML shell returned)"
+            rec.note = ("media/binary not retrievable via direct GET; "
+                        "needs browser/stream capture")
+            log.warning("blocked-media %s -> %s", url_norm, res.final_url)
+            self._write_manifest(rec)
+            return
+
         markdown: str | None = None
         if res.content_type == "html":
             html_text = res.body.decode("utf-8", "replace")
+            # WTO returns HTTP 200 + a "page not found" shell for dead URLs.
+            # Don't keep that shell as content.
+            if extract.is_soft_404(html_text):
+                rec.error = "soft-404: WTO page-not-found shell"
+                log.warning("soft-404 skipped: %s", url_norm)
+                self._write_manifest(rec)
+                return
             self._save_raw(res.body, rec.raw_sha256, "html")
             rec.title = extract.extract_title(html_text)
             markdown = extract.extract_markdown(html_text, url_norm)
@@ -180,13 +201,24 @@ class Crawler:
                     self._enqueue(link, depth + 1, url_norm)
             rec.links = edges
         elif res.content_type == "pdf":
+            # Teacher-review pass: download + classify + record, do NOT parse.
+            # The teacher verifies the PDF inventory first; conversion to
+            # Markdown (MinerU) happens in a later pass. Dedup on the raw-bytes
+            # hash so the same PDF reached via different URLs is dropped.
             self._save_raw(res.body, rec.raw_sha256, "pdf")
-            try:
-                markdown = pdf_convert.pdf_to_markdown(
-                    res.body, stem=(rec.raw_sha256 or "doc")[:16], backend=self.pdf_backend)
-            except RuntimeError as e:
-                rec.error = str(e)
-                log.error("%s", e)
+            rec.content_hash = rec.raw_sha256
+            canonical = (self.dedup.check_content(url_norm, rec.content_hash)
+                         if rec.content_hash else None)
+            if canonical is not None:
+                rec.duplicate_of = canonical
+                log.info("dup-pdf: %s == %s", url_norm, canonical)
+                self._write_manifest(rec)
+                return
+            rec.category = classify.classify(url_norm, rec.title)
+            rec.note = "PDF downloaded; pending parse (teacher review first)"
+            log.info("kept-pdf [%s] %s (downloaded, not parsed)", rec.category, url_norm)
+            self._write_manifest(rec)
+            return
         elif res.content_type == "doc":
             # Non-PDF binary document (docx/xlsx/pptx/...). Save + record; we do
             # not convert to markdown now, but it is captured for the inventory
