@@ -68,7 +68,27 @@ def _safe(symbol: str) -> str:
     return name.strip()
 
 
+CORPUS_ROOT = Path("渔业补贴文件库")
+
+
+def _year_folder(date_iso: str) -> str:
+    return date_iso[:4] if date_iso else "未知年份"
+
+
+def _local_path(body: str, symbol: str, date_iso: str) -> str:
+    """Relative path of the downloaded PDF if it exists on disk, else ''."""
+    folder = BODY_FOLDER.get(body, body.replace("/", "_"))
+    p = CORPUS_ROOT / folder / _year_folder(date_iso) / f"{_safe(symbol)}.pdf"
+    return str(p).replace("\\", "/") if p.exists() else ""
+
+
+def _subject_tags() -> dict[str, list[str]]:
+    p = DM / "subject_tags.json"
+    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+
+
 def load_rows() -> list[dict]:
+    tags = _subject_tags()
     seen: dict[str, dict] = {}
     for f in DETAIL_FILES:
         p = DM / f"{f}.jsonl"
@@ -81,7 +101,7 @@ def load_rows() -> list[dict]:
             key = (r.get("doc_code") or "").strip() or r["symbol"]
             seen.setdefault(key, r)
     rows = []
-    for r in seen.values():
+    for key, r in seen.items():
         iso = _iso(r.get("date", ""))
         rows.append({
             "doc_code": r.get("doc_code", ""),
@@ -96,8 +116,8 @@ def load_rows() -> list[dict]:
             "access": "公开" if r.get("downloadable") else "受限",
             "downloadable": 1 if r.get("verified_pdf") else 0,   # empirical
             "http_status": r.get("http_status"),
-            "subjects": "",                                       # filled later
-            "local_path": "",                                    # filled after download
+            "subjects": "; ".join(tags.get(key, [])),
+            "local_path": _local_path(r["body"], r["symbol"], iso),
             "url": r.get("url", ""),
         })
     rows.sort(key=lambda r: (r["body"], r["series"], r["symbol"]))
