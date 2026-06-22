@@ -73,7 +73,7 @@ def keywords(text: str) -> str:
 def _name(rec: dict) -> str:
     # listing 'text' begins with the symbol; strip it for a cleaner title
     t = re.sub(r"^\S+\s*", "", rec.get("text", "") or "").strip(" -;")
-    return t[:140] or rec.get("symbol", "")
+    return t or rec.get("symbol", "")
 
 
 def build(out: Path) -> tuple[list[dict], list[dict]]:
@@ -99,7 +99,7 @@ def build(out: Path) -> tuple[list[dict], list[dict]]:
             status, local = "已下载", ""
         main.append({
             "类别/系列": CAT_ZH.get(cat, cat), "文件号": "",
-            "名称/标题": (r.get("title") or r["url"].rsplit("/", 1)[-1])[:140],
+            "名称/标题": r.get("title") or r["url"].rsplit("/", 1)[-1],
             "状态": status, "原始URL": r["url"],
             "纳入/下载理由": SITE_REASON.get(cat, "渔业补贴专题站点文件"),
             "本地路径": local,

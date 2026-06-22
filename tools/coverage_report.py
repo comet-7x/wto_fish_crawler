@@ -93,7 +93,7 @@ def main() -> int:
         for r in recs:
             ev_rows.append({
                 "series": label.split()[0], "symbol": r.get("symbol", ""),
-                "title": (r.get("text", "") or "")[:160],
+                "title": r.get("text", "") or "",
                 "fisheries": r.get("fisheries", False),
                 "downloaded": r.get("downloaded", False),
                 "public_download": public,
