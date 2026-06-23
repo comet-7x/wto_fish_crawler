@@ -66,7 +66,7 @@ def render(url: str, browser) -> str:
     prose = extract.extract_markdown(html, url) or ""
     body = prose
     if tables:
-        body += "\n\n## 数据表（动态加载，已渲染补全）\n\n" + "\n\n".join(tables)
+        body += "\n\n" + "\n\n".join(tables)
     return body
 
 
