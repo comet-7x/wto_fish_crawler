@@ -95,7 +95,7 @@ def harvest_page(page: Page) -> list[dict]:
             date = dm.group(1)
         out.append({
             "symbol": symbol.strip("/ "),
-            "title": " ".join(row_text.split())[:300],
+            "title": " ".join(row_text.split()),
             "date": date,
             "doc_url": doc_url,
         })
