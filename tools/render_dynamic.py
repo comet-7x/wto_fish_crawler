@@ -25,9 +25,10 @@ from playwright.sync_api import sync_playwright
 from wto_fish import extract
 
 UA = "wto-fish-corpus-bot/1.0 (research; contact: zhihao7946@gmail.com)"
-# Pages on the fisheries site whose key content is JS-rendered.
+# Pages on the fisheries site whose key content is JS-rendered (DataTables).
 DEFAULT_URLS = [
     "https://www.wto.org/english/tratop_e/rulesneg_e/fish_e/fish_acceptances_e.htm",
+    "https://www.wto.org/english/tratop_e/rulesneg_e/fish_e/fish_fund_e.htm",
 ]
 
 
