@@ -12,7 +12,12 @@ dependencies = [
 [project.optional-dependencies]
 # PDF fallback backend (MinerU itself is installed separately, per its own docs)
 pymupdf = ["pymupdf>=1.24", "pymupdf4llm>=0.0.17"]
-docs = ["playwright>=1.44"]  # Tier-2 Documents Online harvester
+# Headless-Chromium rendering of JS-built pages (DataTables tables, dynamic
+# member lists) — tools/render_dynamic.py. After install run:
+#     python -m playwright install chromium
+render = ["playwright>=1.44"]
+# Spreadsheet deliverables (checklists, indexes) built by tools/*.py
+xlsx = ["openpyxl>=3.1"]
 dev = ["pytest>=8", "ruff>=0.6", "pyright>=1.1"]
 
 [tool.ruff]
