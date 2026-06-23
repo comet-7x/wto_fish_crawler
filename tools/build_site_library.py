@@ -115,6 +115,10 @@ def name_zh(url: str, base: str) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description="Build the fish_e site deliverable")
     ap.add_argument("--out", required=True, help="Tier-1 crawl dir (manifest.jsonl, markdown/)")
+    ap.add_argument("--manual", default="./docs_manifest/manual_additions.jsonl",
+                    help="teacher-confirmed files outside the crawl scope")
+    ap.add_argument("--manual-base", default="./wto_fish_out_v6",
+                    help="base dir that the manual entries' raw_path is relative to")
     args = ap.parse_args()
     out = Path(args.out)
     rows = [json.loads(l) for l in (out / "manifest.jsonl").read_text(encoding="utf-8").splitlines()
@@ -166,6 +170,32 @@ def main() -> int:
             "父页面": r.get("source_url") or "(种子/门户)", "原始URL": url,
             "本地路径": local, "状态": status,
         })
+
+    # Manual additions: teacher-confirmed files outside the fish_e crawl scope
+    # (e.g. the SCM Agreement at docs_e/legal_e/24-scm.pdf).
+    manual_path = Path(args.manual)
+    if manual_path.exists():
+        for line in manual_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            m = json.loads(line)
+            src = Path(args.manual_base) / m["raw_path"]
+            if not src.exists():
+                continue
+            zh_cat = CATEGORY_ZH.get(m.get("category", "uncategorized"), m.get("category", ""))
+            kind = "网页" if m.get("kind") == "HTML" else "PDF"
+            top = "01_网页_HTML转Markdown" if kind == "网页" else "02_文件_PDF"
+            ext = m["raw_path"].rsplit(".", 1)[-1]
+            folder = ROOT / top / zh_cat
+            folder.mkdir(parents=True, exist_ok=True)
+            dest = folder / f"{_safe(m['name'])}.{ext}"
+            dest.write_bytes(src.read_bytes())
+            items.append({
+                "类型": kind, "类别": zh_cat, "名称(中文)": m["name"],
+                "英文标题": m.get("title_en", ""), "父页面": "(手动补充·老师确认)",
+                "原始URL": m["url"], "本地路径": str(dest).replace("\\", "/"),
+                "状态": m.get("status", "已下载·待解析") + "(手动补充)",
+            })
 
     # media note
     media = [it for it in items if it["类型"] == "音视频"]
