@@ -92,7 +92,10 @@ def probe_symbol(client: httpx.Client, symbol: str, out: Path | None) -> dict:
 
 
 def _safe(symbol: str) -> str:
-    return symbol.replace("(", "").replace(")", "").replace("/", "_")
+    name = symbol.replace("(", "").replace(")", "").replace("/", "_")
+    for ch in r'\/:*?"<>|':
+        name = name.replace(ch, "_")
+    return name.strip()
 
 
 def download_listing(listing: Path, out: Path, delay: float,

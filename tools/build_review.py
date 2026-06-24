@@ -292,9 +292,9 @@ def build_folder(out: Path, items: list[dict], docs: list[dict],
         (dest / PENDING_DIR / "_读我.txt").write_text(
             "本目录是 docs.wto.org 文档库（部长决定 / 谈判提案 / 委员会文件）中\n"
             "经 directdoc 匿名下载的英文文档，已分类放好，但【是否纳入本专题待老师确认】。\n"
-            "均未解析为 Markdown。文件名为文档号，标题对照见清单对应枚举表。\n\n"
-            f"· 谈判/：TN/RL 系列中标题含渔业关键词的 {n_tnrl} 份（见“TN-RL枚举(渔业)”表）。\n"
-            f"· 委员会/：渔业补贴委员会 G/FS 全系列 {n_gfs} 份（见“G-FS枚举”表）。\n"
+            "均未解析为 Markdown。文件名为文档号，标题/URL/理由见清单“交付总表”。\n\n"
+            f"· 谈判/：TN/RL 系列中标题含渔业关键词的 {n_tnrl} 份。\n"
+            f"· 委员会/：渔业补贴委员会 G/FS 全系列 {n_gfs} 份。\n"
             "· 部长决定与议定书/：核心部长决定样本。\n",
             encoding="utf-8")
 
@@ -330,8 +330,13 @@ def update_xlsx(xlsx: Path, items: list[dict], docs: list[dict],
     for it in items:
         zh = CATEGORY_ZH.get(it["category"], it["category"])
         counts[zh] = counts.get(zh, 0) + 1
+    seen_zh: set[str] = set()
     for zh in [CATEGORY_ZH[c] for c in CATEGORY_ORDER if CATEGORY_ZH[c] in counts]:
         ws2.append([zh, counts[zh]])
+        seen_zh.add(zh)
+    for zh, count in counts.items():
+        if zh not in seen_zh:
+            ws2.append([zh, count])
     ws2.append(["合计", len(items)])
 
     ws3 = wb["WTO待确认范围"]
@@ -347,12 +352,12 @@ def update_xlsx(xlsx: Path, items: list[dict], docs: list[dict],
                 "规则谈判组谈判提案（TN/RL 系列，2001 年至今）",
                 f"✓ 脚本检索枚举全系列共 {tnrl_total or '—'} 份，其中标题含渔业关键词 {len(tnrl_fish)} 份。"
                 f"这 {len(tnrl_fish)} 份英文版【已全部下载 {n_tnrl_dl} 份】放入 "
-                "for_teacher/待确认/谈判/（文件名=文档号，标题对照见“TN-RL枚举(渔业)”表），未解析为 Markdown，待老师确认纳入。"
+                "for_teacher/待确认/谈判/（文件名=文档号，标题/URL/理由见“交付总表”），未解析为 Markdown，待老师确认纳入。"
                 "注：标题无“渔业”字样的会议纪要等程序性文件未计入", ""])
     ws3.append(["文档库·委员会文件",
                 "渔业补贴委员会文件（协定 2025-09-15 生效后新设，G/FS/ 系列已确认）",
                 f"✓ 系列号确认为 G/FS/。已枚举全系列共 {gfs_total or len(gfs_records)} 份，"
-                f"英文版【已下载 {n_gfs_dl} 份】放入 for_teacher/待确认/委员会/（见“G-FS枚举”表 / "
+                f"英文版【已下载 {n_gfs_dl} 份】放入 for_teacher/待确认/委员会/（见“交付总表” / "
                 "docs_manifest/gfs_listing.jsonl）。多为成员履约/通报文件，未解析为 Markdown，待老师确认纳入。"
                 "该委员会将持续产出新文件，需定期重跑枚举", ""])
     ws3.append(["音视频·受限",
